@@ -49,30 +49,29 @@ static const char delimiter = ';';
  * @return pointer to a safe filesystem name (static buffer)
  */
 
-static char*
-mksafe(const char *name)
-{
-    int i, j;
-    const char safe[] = "-.,_";
-    const char hex[] = "0123456789ABCDEF";
-    static char save_name[NAME_MAX];
-    
-    for (i = 0, j = 0; name[i] && j < NAME_MAX-1; i++) {
-	if (isalnum(name[i]) || strchr(safe, name[i])) {
-	    save_name[j++] = name[i];
-	} else {
-	    /* %-escape the char if there is enough space left */
-	    if (j < NAME_MAX - 4) {
-		save_name[j++] = '%';
-		save_name[j++] = hex[(name[i]>>4) & 0x0f];
-		save_name[j++] = hex[name[i] & 0x0f];;
-	    } else {
-		break;
-	    }
-	}
+static char *
+mksafe(const char *name) {
+  int i, j;
+  const char safe[] = "-.,_";
+  const char hex[] = "0123456789ABCDEF";
+  static char save_name[NAME_MAX];
+
+  for (i = 0, j = 0; name[i] && j < NAME_MAX - 1; i++) {
+    if (isalnum(name[i]) || strchr(safe, name[i])) {
+      save_name[j++] = name[i];
+    } else {
+      /* %-escape the char if there is enough space left */
+      if (j < NAME_MAX - 4) {
+        save_name[j++] = '%';
+        save_name[j++] = hex[(name[i] >> 4) & 0x0f];
+        save_name[j++] = hex[name[i] & 0x0f];;
+      } else {
+        break;
+      }
     }
-    save_name[j] = 0;
-    return save_name;
+  }
+  save_name[j] = 0;
+  return save_name;
 }
 
 /**
@@ -89,17 +88,16 @@ mksafe(const char *name)
 
 static int
 remove_cb(const char *fpath, const struct stat *sb,
-	  int typeflag, struct FTW *ftwbuf)
-{
-    (void) sb;
-    (void) typeflag;
-    (void) ftwbuf;
-    
-    if (remove(fpath)) {
-	lmap_err("cannot remove %s", fpath);
-	/* we continue to remove the rest */
-    }
-    return 0;
+          int typeflag, struct FTW *ftwbuf) {
+  (void) sb;
+  (void) typeflag;
+  (void) ftwbuf;
+
+  if (remove(fpath)) {
+    lmap_err("cannot remove %s", fpath);
+    /* we continue to remove the rest */
+  }
+  return 0;
 }
 
 /**
@@ -113,12 +111,11 @@ remove_cb(const char *fpath, const struct stat *sb,
  */
 
 static int
-remove_all(char *path)
-{
-    if (! path) {
-	return -1;
-    }
-    return nftw(path, remove_cb, 12, FTW_DEPTH | FTW_PHYS);
+remove_all(char *path) {
+  if (!path) {
+    return -1;
+  }
+  return nftw(path, remove_cb, 12, FTW_DEPTH | FTW_PHYS);
 }
 
 static unsigned long du_cnt = 0;
@@ -126,27 +123,25 @@ static unsigned long du_size = 0;
 static unsigned long du_blocks = 0;
 
 static int
-du_cb(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf)
-{
-    if (tflag == FTW_F) {
-	du_size += sb->st_size;
-	du_blocks += sb->st_blocks;
-	du_cnt++;
-    }
-    return 0;           /* To tell nftw() to continue */
+du_cb(const char *fpath, const struct stat *sb, int tflag, struct FTW *ftwbuf) {
+  if (tflag == FTW_F) {
+    du_size += sb->st_size;
+    du_blocks += sb->st_blocks;
+    du_cnt++;
+  }
+  return 0;           /* To tell nftw() to continue */
 }
 
 static int
-du(char *path, uint64_t *storage)
-{
-    du_cnt = 0;
-    du_size = 0;
-    du_blocks = 0;
-    if (nftw(path, du_cb, 6, 0) == -1) {
-	return -1;
-    }
-    *storage = du_blocks * 512;
-    return 0;
+du(char *path, uint64_t *storage) {
+  du_cnt = 0;
+  du_size = 0;
+  du_blocks = 0;
+  if (nftw(path, du_cb, 6, 0) == -1) {
+    return -1;
+  }
+  *storage = du_blocks * 512;
+  return 0;
 }
 
 
@@ -161,66 +156,64 @@ du(char *path, uint64_t *storage)
  */
 
 int
-lmapd_workspace_clean(struct lmapd *lmapd)
-{
-    int ret = 0;
-    char filepath[PATH_MAX];
-    struct dirent *dp;
-    DIR *dfd;
+lmapd_workspace_clean(struct lmapd *lmapd) {
+  int ret = 0;
+  char filepath[PATH_MAX];
+  struct dirent *dp;
+  DIR *dfd;
 
-    assert(lmapd);
+  assert(lmapd);
 
-    (void) remove_all(NULL);
+  (void) remove_all(NULL);
 
-    if (!lmapd->queue_path) {
-	return 0;
+  if (!lmapd->queue_path) {
+    return 0;
+  }
+
+  dfd = opendir(lmapd->queue_path);
+  if (!dfd) {
+    lmap_err("failed to open queue directory '%s'", lmapd->queue_path);
+    return -1;
+  }
+
+  while ((dp = readdir(dfd)) != NULL) {
+    if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
+      continue;
     }
-
-    dfd = opendir(lmapd->queue_path);
-    if (!dfd) {
-	lmap_err("failed to open queue directory '%s'", lmapd->queue_path);
-	return -1;
+    (void) snprintf(filepath, sizeof(filepath), "%s/%s",
+                    lmapd->queue_path, dp->d_name);
+    if (remove_all(filepath) != 0) {
+      lmap_err("failed to remove '%s'", filepath);
+      ret = -1;
     }
-    
-    while ((dp = readdir(dfd)) != NULL) {
-	if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
-	    continue;
-	}
-	(void) snprintf(filepath, sizeof(filepath), "%s/%s",
-			lmapd->queue_path, dp->d_name);
-	if (remove_all(filepath) != 0) {
-	    lmap_err("failed to remove '%s'", filepath);
-	    ret = -1;
-	}
-    }
-    (void) closedir(dfd);
+  }
+  (void) closedir(dfd);
 
-    return ret;
+  return ret;
 }
 
 int
-lmapd_workspace_update(struct lmapd *lmapd)
-{
-    int ret = 0;
-    struct schedule *sched;
-    struct action *act;
+lmapd_workspace_update(struct lmapd *lmapd) {
+  int ret = 0;
+  struct schedule *sched;
+  struct action *act;
 
-    if (!lmapd || !lmapd->lmap) {
-	return 0;
+  if (!lmapd || !lmapd->lmap) {
+    return 0;
+  }
+
+  for (sched = lmapd->lmap->schedules; sched; sched = sched->next) {
+    if (du(sched->workspace, &sched->storage) == -1) {
+      ret = -1;
     }
-
-    for (sched = lmapd->lmap->schedules; sched; sched = sched->next) {
-	if (du(sched->workspace, &sched->storage) == -1) {
-	    ret = -1;
-	}
-	for (act = sched->actions; act; act = act->next) {
-	    if (du(act->workspace, &act->storage) == -1) {
-		ret = -1;
-	    }
-	}
+    for (act = sched->actions; act; act = act->next) {
+      if (du(act->workspace, &act->storage) == -1) {
+        ret = -1;
+      }
     }
+  }
 
-    return ret;
+  return ret;
 }
 
 /**
@@ -235,40 +228,39 @@ lmapd_workspace_update(struct lmapd *lmapd)
  */
 
 int
-lmapd_workspace_action_clean(struct lmapd *lmapd, struct action *action)
-{
-    int ret = 0;
-    char filepath[PATH_MAX];
-    struct dirent *dp;
-    DIR *dfd;
+lmapd_workspace_action_clean(struct lmapd *lmapd, struct action *action) {
+  int ret = 0;
+  char filepath[PATH_MAX];
+  struct dirent *dp;
+  DIR *dfd;
 
-    assert(lmapd);
-    (void) lmapd;
+  assert(lmapd);
+  (void) lmapd;
 
-    if (!action || !action->workspace) {
-	return 0;
+  if (!action || !action->workspace) {
+    return 0;
+  }
+
+  dfd = opendir(action->workspace);
+  if (!dfd) {
+    lmap_err("failed to open '%s'", action->workspace);
+    return -1;
+  }
+
+  while ((dp = readdir(dfd)) != NULL) {
+    if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
+      continue;
     }
-
-    dfd = opendir(action->workspace);
-    if (!dfd) {
-	lmap_err("failed to open '%s'", action->workspace);
-	return -1;
+    snprintf(filepath, sizeof(filepath), "%s/%s",
+             action->workspace, dp->d_name);
+    if (remove_all(filepath) != 0) {
+      lmap_err("failed to remove '%s'", filepath);
+      ret = -1;
     }
+  }
+  (void) closedir(dfd);
 
-    while ((dp = readdir(dfd)) != NULL) {
-	if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
-	    continue;
-	}
-	snprintf(filepath, sizeof(filepath), "%s/%s",
-		 action->workspace, dp->d_name);
-	if (remove_all(filepath) != 0) {
-	    lmap_err("failed to remove '%s'", filepath);
-	    ret = -1;
-	}
-    }
-    (void) closedir(dfd);
-
-    return ret;
+  return ret;
 }
 
 /**
@@ -286,45 +278,44 @@ lmapd_workspace_action_clean(struct lmapd *lmapd, struct action *action)
 
 int
 lmapd_workspace_action_move(struct lmapd *lmapd, struct schedule *schedule,
-		            struct action *action, struct schedule *destination)
-{
-    int ret = 0;
-    char oldfilepath[PATH_MAX];
-    char newfilepath[PATH_MAX];
-    struct dirent *dp;
-    DIR *dfd;
+                            struct action *action, struct schedule *destination) {
+  int ret = 0;
+  char oldfilepath[PATH_MAX];
+  char newfilepath[PATH_MAX];
+  struct dirent *dp;
+  DIR *dfd;
 
-    assert(lmapd);
-    (void) lmapd;
+  assert(lmapd);
+  (void) lmapd;
 
-    if (!schedule || !schedule->name
-	|| !action || !action->workspace || !action->name
-	|| !destination || !destination->workspace) {
-	return 0;
+  if (!schedule || !schedule->name
+      || !action || !action->workspace || !action->name
+      || !destination || !destination->workspace) {
+    return 0;
+  }
+
+  dfd = opendir(action->workspace);
+  if (!dfd) {
+    lmap_err("failed to open '%s'", action->workspace);
+    return -1;
+  }
+
+  while ((dp = readdir(dfd)) != NULL) {
+    if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
+      continue;
     }
-
-    dfd = opendir(action->workspace);
-    if (!dfd) {
-	lmap_err("failed to open '%s'", action->workspace);
-	return -1;
+    snprintf(oldfilepath, sizeof(oldfilepath), "%s/%s",
+             action->workspace, dp->d_name);
+    snprintf(newfilepath, sizeof(newfilepath), "%s/%s",
+             destination->workspace, dp->d_name);
+    if (link(oldfilepath, newfilepath) < 0) {
+      lmap_err("failed to move '%s' to '%s'", oldfilepath, newfilepath);
+      ret = -1;
     }
+  }
+  (void) closedir(dfd);
 
-    while ((dp = readdir(dfd)) != NULL) {
-	if (!strcmp(dp->d_name, ".") || !strcmp(dp->d_name, "..")) {
-	    continue;
-	}
-	snprintf(oldfilepath, sizeof(oldfilepath), "%s/%s",
-		 action->workspace, dp->d_name);
-	snprintf(newfilepath, sizeof(newfilepath), "%s/%s",
-		 destination->workspace, dp->d_name);
-	if (link(oldfilepath, newfilepath) < 0) {
-	    lmap_err("failed to move '%s' to '%s'", oldfilepath, newfilepath);
-	    ret = -1;
-	}
-    }
-    (void) closedir(dfd);
-
-    return ret;
+  return ret;
 }
 
 /**
@@ -339,369 +330,361 @@ lmapd_workspace_action_move(struct lmapd *lmapd, struct schedule *schedule,
  */
 
 int
-lmapd_workspace_init(struct lmapd *lmapd)
-{
-    int ret = 0;
-    struct schedule *sched;
-    struct action *act;
-    char filepath[PATH_MAX];
-    
-    assert(lmapd);
+lmapd_workspace_init(struct lmapd *lmapd) {
+  int ret = 0;
+  struct schedule *sched;
+  struct action *act;
+  char filepath[PATH_MAX];
 
-    if (!lmapd->lmap || !lmapd->queue_path) {
-	return 0;
+  assert(lmapd);
+
+  if (!lmapd->lmap || !lmapd->queue_path) {
+    return 0;
+  }
+
+  for (sched = lmapd->lmap->schedules; sched; sched = sched->next) {
+    if (!sched->name) {
+      continue;
     }
-
-    for (sched = lmapd->lmap->schedules; sched; sched = sched->next) {
-	if (! sched->name) {
-	    continue;
-	}
-	snprintf(filepath, sizeof(filepath), "%s/%s",
-		 lmapd->queue_path, mksafe(sched->name));
-	if (mkdir(filepath, 0700) < 0 && errno != EEXIST) {
-	    lmap_err("failed to mkdir '%s'", filepath);
-	    ret = -1;
-	}
-	lmap_schedule_set_workspace(sched, filepath);
-
-	for (act = sched->actions; act; act = act->next) {
-	    if (! act->name) {
-		continue;
-	    }
-	    snprintf(filepath, sizeof(filepath), "%s/%s",
-		     sched->workspace, mksafe(act->name));
-	    if (mkdir(filepath, 0700) < 0 && errno != EEXIST) {
-		lmap_err("failed to mkdir '%s'", filepath);
-		ret = -1;
-		continue;
-	    }
-	    lmap_action_set_workspace(act, filepath);
-	}
+    snprintf(filepath, sizeof(filepath), "%s/%s",
+             lmapd->queue_path, mksafe(sched->name));
+    if (mkdir(filepath, 0700) < 0 && errno != EEXIST) {
+      lmap_err("failed to mkdir '%s'", filepath);
+      ret = -1;
     }
+    lmap_schedule_set_workspace(sched, filepath);
 
-    return ret;
+    for (act = sched->actions; act; act = act->next) {
+      if (!act->name) {
+        continue;
+      }
+      snprintf(filepath, sizeof(filepath), "%s/%s",
+               sched->workspace, mksafe(act->name));
+      if (mkdir(filepath, 0700) < 0 && errno != EEXIST) {
+        lmap_err("failed to mkdir '%s'", filepath);
+        ret = -1;
+        continue;
+      }
+      lmap_action_set_workspace(act, filepath);
+    }
+  }
+
+  return ret;
 }
 
 int
-lmapd_workspace_action_meta_add_start(struct schedule *schedule, struct action *action, struct task *task)
-{
-    int fd;
-    FILE *f;
-    char buf[128];
-    struct option *option;
-    struct tag *tag;
-    
-    assert(action && action->name && action->workspace);
+lmapd_workspace_action_meta_add_start(struct schedule *schedule, struct action *action, struct task *task) {
+  int fd;
+  FILE *f;
+  char buf[128];
+  struct option *option;
+  struct tag *tag;
 
-    fd = lmapd_workspace_action_open_meta(schedule, action,
-					  O_WRONLY | O_CREAT | O_TRUNC);
-    if (fd == -1) {
-	return -1;
-    }
-    f = fdopen(fd, "w");
-    if (! f) {
-	lmap_err("failed to create meta file stream for action '%s'",
-		 action->name);
-	(void) close(fd);
-	return -1;
-    }
-    
-    snprintf(buf, sizeof(buf), "%s version %d.%d.%d", LMAPD_LMAPD,
-	     LMAP_VERSION_MAJOR, LMAP_VERSION_MINOR, LMAP_VERSION_PATCH);
-    csv_append_key_value(f, delimiter, "magic", buf);
-    csv_append_key_value(f, delimiter, "schedule", schedule->name);
-    csv_append_key_value(f, delimiter, "action", action->name);
-    csv_append_key_value(f, delimiter, "task", task->name);
-    for (option = task->options; option; option = option->next) {
-	csv_append_key_value(f, delimiter, "option-id", option->id);
-	csv_append_key_value(f, delimiter, "option-name", option->name);
-	csv_append_key_value(f, delimiter, "option-value", option->value);
-    }
-    for (option = action->options; option; option = option->next) {
-	csv_append_key_value(f, delimiter, "option-id", option->id);
-	csv_append_key_value(f, delimiter, "option-name", option->name);
-	csv_append_key_value(f, delimiter, "option-value", option->value);
-    }
-    for (tag = task->tags; tag; tag = tag->next) {
-	csv_append_key_value(f, delimiter, "tag", tag->tag);
-    }
-    for (tag = schedule->tags; tag; tag = tag->next) {
-	csv_append_key_value(f, delimiter, "tag", tag->tag);
-    }
-    for (tag = action->tags; tag; tag = tag->next) {
-	csv_append_key_value(f, delimiter, "tag", tag->tag);
-    }
-    snprintf(buf, sizeof(buf), "%lu", schedule->last_invocation);
-    csv_append_key_value(f, delimiter, "event", buf);
-    snprintf(buf, sizeof(buf), "%lu", action->last_invocation);
-    csv_append_key_value(f, delimiter, "start", buf);
-    if (schedule->cycle_number) {
-	struct tm *tmp;
-	tmp = gmtime(&schedule->cycle_number);
-	strftime(buf, sizeof(buf), "%Y%m%d.%H%M%S", tmp);
-	csv_append_key_value(f, delimiter, "cycle-number", buf);
-    }
-    /* TODO conflict */
-    (void) fclose(f);
-    return 0;
+  assert(action && action->name && action->workspace);
+
+  fd = lmapd_workspace_action_open_meta(schedule, action,
+                                        O_WRONLY | O_CREAT | O_TRUNC);
+  if (fd == -1) {
+    return -1;
+  }
+  f = fdopen(fd, "w");
+  if (!f) {
+    lmap_err("failed to create meta file stream for action '%s'",
+             action->name);
+    (void) close(fd);
+    return -1;
+  }
+
+  snprintf(buf, sizeof(buf), "%s version %d.%d.%d", LMAPD_LMAPD,
+           LMAP_VERSION_MAJOR, LMAP_VERSION_MINOR, LMAP_VERSION_PATCH);
+  csv_append_key_value(f, delimiter, "magic", buf);
+  csv_append_key_value(f, delimiter, "schedule", schedule->name);
+  csv_append_key_value(f, delimiter, "action", action->name);
+  csv_append_key_value(f, delimiter, "task", task->name);
+  for (option = task->options; option; option = option->next) {
+    csv_append_key_value(f, delimiter, "option-id", option->id);
+    csv_append_key_value(f, delimiter, "option-name", option->name);
+    csv_append_key_value(f, delimiter, "option-value", option->value);
+  }
+  for (option = action->options; option; option = option->next) {
+    csv_append_key_value(f, delimiter, "option-id", option->id);
+    csv_append_key_value(f, delimiter, "option-name", option->name);
+    csv_append_key_value(f, delimiter, "option-value", option->value);
+  }
+  for (tag = task->tags; tag; tag = tag->next) {
+    csv_append_key_value(f, delimiter, "tag", tag->tag);
+  }
+  for (tag = schedule->tags; tag; tag = tag->next) {
+    csv_append_key_value(f, delimiter, "tag", tag->tag);
+  }
+  for (tag = action->tags; tag; tag = tag->next) {
+    csv_append_key_value(f, delimiter, "tag", tag->tag);
+  }
+  snprintf(buf, sizeof(buf), "%lu", schedule->last_invocation);
+  csv_append_key_value(f, delimiter, "event", buf);
+  snprintf(buf, sizeof(buf), "%lu", action->last_invocation);
+  csv_append_key_value(f, delimiter, "start", buf);
+  if (schedule->cycle_number) {
+    struct tm *tmp;
+    tmp = gmtime(&schedule->cycle_number);
+    strftime(buf, sizeof(buf), "%Y%m%d.%H%M%S", tmp);
+    csv_append_key_value(f, delimiter, "cycle-number", buf);
+  }
+  /* TODO conflict */
+  (void) fclose(f);
+  return 0;
 }
 
 int
-lmapd_workspace_action_meta_add_end(struct schedule *schedule, struct action *action)
-{
-    int fd;
-    FILE *f;
-    char buf[128];
+lmapd_workspace_action_meta_add_end(struct schedule *schedule, struct action *action) {
+  int fd;
+  FILE *f;
+  char buf[128];
 
-    assert(action && action->name && action->workspace);
-    
-    fd = lmapd_workspace_action_open_meta(schedule, action,
-					  O_WRONLY | O_APPEND);
-    if (fd == -1) {
-	return -1;
-    }
-    f = fdopen(fd, "a");
-    if (! f) {
-	lmap_err("failed to append meta file stream for action '%s'", action->name);
-	(void) close(fd);
-	return -1;
-    }
-    
-    snprintf(buf, sizeof(buf), "%lu", action->last_completion);
-    csv_append_key_value(f, delimiter, "end", buf);
-    snprintf(buf, sizeof(buf), "%d", action->last_status);
-    csv_append_key_value(f, delimiter, "status", buf);
-    /* TODO conflicts */
-    (void) fclose(f);
-    return 0;
+  assert(action && action->name && action->workspace);
+
+  fd = lmapd_workspace_action_open_meta(schedule, action,
+                                        O_WRONLY | O_APPEND);
+  if (fd == -1) {
+    return -1;
+  }
+  f = fdopen(fd, "a");
+  if (!f) {
+    lmap_err("failed to append meta file stream for action '%s'", action->name);
+    (void) close(fd);
+    return -1;
+  }
+
+  snprintf(buf, sizeof(buf), "%lu", action->last_completion);
+  csv_append_key_value(f, delimiter, "end", buf);
+  snprintf(buf, sizeof(buf), "%d", action->last_status);
+  csv_append_key_value(f, delimiter, "status", buf);
+  /* TODO conflicts */
+  (void) fclose(f);
+  return 0;
 }
 
 int
 lmapd_workspace_action_open_data(struct schedule *schedule,
-				 struct action *action, int flags)
-{
-    int fd;
-    int len;
-    char filepath[PATH_MAX];
+                                 struct action *action, int flags) {
+  int fd;
+  int len;
+  char filepath[PATH_MAX];
 
-    snprintf(filepath, sizeof(filepath), "%s/%lu-%s",
-	     action->workspace, action->last_invocation,
-	     mksafe(schedule->name));
-    len = strlen(filepath);
-    snprintf(filepath+len, sizeof(filepath)-len, "-%s.data",
-	     mksafe(action->name));
-    fd = open(filepath, flags, 0600);
-    if (fd == -1) {
-	lmap_err("failed to open '%s'", filepath);
-    }
-    return fd;
+  snprintf(filepath, sizeof(filepath), "%s/%lu-%s",
+           action->workspace, action->last_invocation,
+           mksafe(schedule->name));
+  len = strlen(filepath);
+  snprintf(filepath + len, sizeof(filepath) - len, "-%s.data",
+           mksafe(action->name));
+  fd = open(filepath, flags, 0600);
+  if (fd == -1) {
+    lmap_err("failed to open '%s'", filepath);
+  }
+  return fd;
 }
 
 int
 lmapd_workspace_action_open_meta(struct schedule *schedule,
-				 struct action *action, int flags)
-{
-    int fd;
-    int len;
-    char filepath[PATH_MAX];
+                                 struct action *action, int flags) {
+  int fd;
+  int len;
+  char filepath[PATH_MAX];
 
-    snprintf(filepath, sizeof(filepath), "%s/%lu-%s",
-	     action->workspace, action->last_invocation,
-	     mksafe(schedule->name));
-    len = strlen(filepath);
-    snprintf(filepath+len, sizeof(filepath)-len, "-%s.meta",
-	     mksafe(action->name));
-    fd = open(filepath, flags, 0600);
-    if (fd == -1) {
-	lmap_err("failed to open '%s'", filepath);
-    }
-    return fd;
+  snprintf(filepath, sizeof(filepath), "%s/%lu-%s",
+           action->workspace, action->last_invocation,
+           mksafe(schedule->name));
+  len = strlen(filepath);
+  snprintf(filepath + len, sizeof(filepath) - len, "-%s.meta",
+           mksafe(action->name));
+  fd = open(filepath, flags, 0600);
+  if (fd == -1) {
+    lmap_err("failed to open '%s'", filepath);
+  }
+  return fd;
 }
 
 static struct table *
-read_table(int fd)
-{
-    int inrow = 0;
-    FILE *file;
-    struct table *tab;
-    struct row *row = NULL;
-    struct value *val;
+read_table(int fd) {
+  int inrow = 0;
+  FILE *file;
+  struct table *tab;
+  struct row *row = NULL;
+  struct value *val;
 
-    file = fdopen(fd, "r");
-    if (! file) {
-	lmap_err("failed to create file stream: %s", strerror(errno));
-	return NULL;
-    }
+  file = fdopen(fd, "r");
+  if (!file) {
+    lmap_err("failed to create file stream: %s", strerror(errno));
+    return NULL;
+  }
 
-    tab = lmap_table_new();
-    if (! tab) {
-	(void) fclose(file);
-	return NULL;
-    }
-
-    while (!feof(file)) {
-	char *s = csv_next(file, delimiter);
-	if (! s) {
-	    if (feof(file)) {
-		break;
-	    }
-	    inrow = 0;
-	    continue;
-	}
-	if (!inrow) {
-	    row = lmap_row_new();
-	    if (! row) {
-		lmap_table_free(tab);
-		if (s) free(s);
-		(void) fclose(file);
-		return NULL;
-	    }
-	    lmap_table_add_row(tab, row);
-	    inrow++;
-	}
-	val = lmap_value_new();
-	if (! val) {
-	    lmap_table_free(tab);
-	    if (s) free(s);
-	    (void) fclose(file);
-	    return NULL;
-	}
-	lmap_value_set_value(val, s);
-	lmap_row_add_value(row, val);
-	if (s) free(s);
-    }
-
+  tab = lmap_table_new();
+  if (!tab) {
     (void) fclose(file);
-    return tab;
+    return NULL;
+  }
+
+  while (!feof(file)) {
+    char *s = csv_next(file, delimiter);
+    if (!s) {
+      if (feof(file)) {
+        break;
+      }
+      inrow = 0;
+      continue;
+    }
+    if (!inrow) {
+      row = lmap_row_new();
+      if (!row) {
+        lmap_table_free(tab);
+        if (s) free(s);
+        (void) fclose(file);
+        return NULL;
+      }
+      lmap_table_add_row(tab, row);
+      inrow++;
+    }
+    val = lmap_value_new();
+    if (!val) {
+      lmap_table_free(tab);
+      if (s) free(s);
+      (void) fclose(file);
+      return NULL;
+    }
+    lmap_value_set_value(val, s);
+    lmap_row_add_value(row, val);
+    if (s) free(s);
+  }
+
+  (void) fclose(file);
+  return tab;
 }
 
 static struct result *
-read_result(int fd)
-{
-    FILE *file;
-    struct result *res;
-    char *key, *value;
-    struct option *opt = NULL;
+read_result(int fd) {
+  FILE *file;
+  struct result *res;
+  char *key, *value;
+  struct option *opt = NULL;
 
-    file = fdopen(fd, "r");
-    if (! file) {
-	lmap_err("failed to create file stream: %s", strerror(errno));
-	return NULL;
-    }
+  file = fdopen(fd, "r");
+  if (!file) {
+    lmap_err("failed to create file stream: %s", strerror(errno));
+    return NULL;
+  }
 
-    res = lmap_result_new();
-    if (! res) {
-	(void) fclose(file);
-	return NULL;
-    }
-
-    while (!feof(file)) {
-	key = NULL;
-	value = NULL;
-	csv_next_key_value(file, delimiter, &key, &value);
-	if (key && value) {
-	    if (! strcmp(key, "schedule")) {
-		lmap_result_set_schedule(res, value);
-	    }
-	    if (! strcmp(key, "action")) {
-		lmap_result_set_action(res, value);
-	    }
-	    if (! strcmp(key, "task")) {
-		lmap_result_set_task(res, value);
-	    }
-	    if (! strcmp(key, "option-id")) {
-		if (opt) {
-		    lmap_result_add_option(res, opt);
-		}
-		opt = lmap_option_new();
-		if (opt) lmap_option_set_id(opt, value);
-	    }
-	    if (! strcmp(key, "option-name")) {
-		if (opt) lmap_option_set_name(opt, value);
-	    }
-	    if (! strcmp(key, "option-value")) {
-		if (opt) lmap_option_set_value(opt, value);
-	    }
-	    if (! strcmp(key, "tag")) {
-		lmap_result_add_tag(res, value);
-	    }
-	    if (! strcmp(key, "event")) {
-		lmap_result_set_event_epoch(res, value);
-	    }
-	    if (! strcmp(key, "start")) {
-		lmap_result_set_start_epoch(res, value);
-	    }
-	    if (! strcmp(key, "end")) {
-		lmap_result_set_end_epoch(res, value);
-	    }
-	    if (! strcmp(key, "cycle-number")) {
-		lmap_result_set_cycle_number(res, value);
-	    }
-	    if (! strcmp(key, "status")) {
-		lmap_result_set_status(res, value);
-	    }
-	}
-	if (key) free(key);
-	if (value) free(value);
-    }
-    if (opt) {
-	lmap_result_add_option(res, opt);
-    }
-
+  res = lmap_result_new();
+  if (!res) {
     (void) fclose(file);
-    return res;
+    return NULL;
+  }
+
+  while (!feof(file)) {
+    key = NULL;
+    value = NULL;
+    csv_next_key_value(file, delimiter, &key, &value);
+    if (key && value) {
+      if (!strcmp(key, "schedule")) {
+        lmap_result_set_schedule(res, value);
+      }
+      if (!strcmp(key, "action")) {
+        lmap_result_set_action(res, value);
+      }
+      if (!strcmp(key, "task")) {
+        lmap_result_set_task(res, value);
+      }
+      if (!strcmp(key, "option-id")) {
+        if (opt) {
+          lmap_result_add_option(res, opt);
+        }
+        opt = lmap_option_new();
+        if (opt) lmap_option_set_id(opt, value);
+      }
+      if (!strcmp(key, "option-name")) {
+        if (opt) lmap_option_set_name(opt, value);
+      }
+      if (!strcmp(key, "option-value")) {
+        if (opt) lmap_option_set_value(opt, value);
+      }
+      if (!strcmp(key, "tag")) {
+        lmap_result_add_tag(res, value);
+      }
+      if (!strcmp(key, "event")) {
+        lmap_result_set_event_epoch(res, value);
+      }
+      if (!strcmp(key, "start")) {
+        lmap_result_set_start_epoch(res, value);
+      }
+      if (!strcmp(key, "end")) {
+        lmap_result_set_end_epoch(res, value);
+      }
+      if (!strcmp(key, "cycle-number")) {
+        lmap_result_set_cycle_number(res, value);
+      }
+      if (!strcmp(key, "status")) {
+        lmap_result_set_status(res, value);
+      }
+    }
+    if (key) free(key);
+    if (value) free(value);
+  }
+  if (opt) {
+    lmap_result_add_option(res, opt);
+  }
+
+  (void) fclose(file);
+  return res;
 }
 
 int
-lmapd_workspace_read_results(struct lmapd *lmapd)
-{
-    char *p;
-    struct dirent *dp;
-    DIR *dfd;
-    struct table *tab;
-    struct result *res;
+lmapd_workspace_read_results(struct lmapd *lmapd) {
+  char *p;
+  struct dirent *dp;
+  DIR *dfd;
+  struct table *tab;
+  struct result *res;
 
-    dfd = opendir(".");
-    if (!dfd) {
-	lmap_err("failed to open workspace directory '%s'", ".");
-	return -1;
+  dfd = opendir(".");
+  if (!dfd) {
+    lmap_err("failed to open workspace directory '%s'", ".");
+    return -1;
+  }
+
+  while ((dp = readdir(dfd)) != NULL) {
+    if (strlen(dp->d_name) < 5) {
+      continue;
+    }
+    p = strrchr(dp->d_name, '.');
+    if (!p) {
+      continue;
     }
 
-    while ((dp = readdir(dfd)) != NULL) {
-	if (strlen(dp->d_name) < 5) {
-	    continue;
-	}
-	p = strrchr(dp->d_name, '.');
-	if (! p) {
-	    continue;
-	}
-
-	if (!strcmp(p, ".meta")) {
-	    int mfd, dfd;
-	    mfd = open(dp->d_name, O_RDONLY);
-	    if (mfd == -1) {
-		lmap_err("failed to open meta file '%s': %s",
-			 dp->d_name, strerror(errno));
-		continue;
-	    }
-	    strcpy(p, ".data");
-	    dfd = open(dp->d_name, O_RDONLY);
-	    if (dfd == -1) {
-		lmap_err("failed to open data file '%s': %s",
-			 dp->d_name, strerror(errno));
-		(void) close(mfd);
-		continue;
-	    }
-	    res = read_result(mfd);
-	    if (res) {
-		lmap_add_result(lmapd->lmap, res);
-		tab = read_table(dfd);
-		if (tab) {
-		    lmap_result_add_table(res, tab);
-		}
-	    }
-	}
+    if (!strcmp(p, ".meta")) {
+      int mfd, dfd;
+      mfd = open(dp->d_name, O_RDONLY);
+      if (mfd == -1) {
+        lmap_err("failed to open meta file '%s': %s",
+                 dp->d_name, strerror(errno));
+        continue;
+      }
+      strcpy(p, ".data");
+      dfd = open(dp->d_name, O_RDONLY);
+      if (dfd == -1) {
+        lmap_err("failed to open data file '%s': %s",
+                 dp->d_name, strerror(errno));
+        (void) close(mfd);
+        continue;
+      }
+      res = read_result(mfd);
+      if (res) {
+        lmap_add_result(lmapd->lmap, res);
+        tab = read_table(dfd);
+        if (tab) {
+          lmap_result_add_table(res, tab);
+        }
+      }
     }
-    (void) closedir(dfd);
-    return 0;
+  }
+  (void) closedir(dfd);
+  return 0;
 }
